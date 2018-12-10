@@ -1,0 +1,475 @@
+---
+title: "Alumni Donation Rate - A Case Study in Linear Regression"
+author: Harish M
+output:
+  rmdformats::readthedown:
+    self_contained: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    code_folding: show
+---
+# Introduction
+
+Alumni donations are an important source of revenue for colleges and universities. Studying the effects of different variables on the donation could help predict a university's revenue for a particular year. Also, understanding the factors that influence increases in the percentage of alumni who make a donation could help administrators implement policies that could lead to increased revenues.
+
+For example, research shows that students who are more satisfied with their contact with teachers are more likely to graduate and give back to their alma mater. Another factor could be whether or not the university is public. The national ranking of the university could also influence the alumni to donate. Ivy league colleges have always had a high alumni donation rate and the state in which a school is located could affect the revenue as well.
+
+This report quantifies the effect of the above-mentioned variables on the alumni donation rate. After exploratory analyses, a linear regression model is built and the flaws in the model are remedied with model diagnostic measures.
+
+# Required Packages
+```{r message = FALSE, warning = FALSE}
+library(knitr)
+library(tidyverse)
+library(ggpubr)
+library(broom)
+library(DT)
+library(car)
+
+opts_chunk$set(message = FALSE, warning = FALSE)
+```
+The data that is being analyzed in this report contains donation records of 48 national universities. It comes from "America’s Best Colleges, Year 2000 Edition". The data is appended with the state the school is in and it's USNews ranking.
+
+```{r}
+url <- "https://bgreenwell.github.io/uc-bana7052/data/alumni.csv"
+alumni <- read.csv(url)
+alumni$private <- as.factor(alumni$private)
+alumni$state <- c("MA", "MA", "RI", "CA", "PA", "OH", "VA", "NY", "NY", "NH",
+                  "NC", "GA", "DC", "MA", "MD", "PA", "MA", "NY", "IL", "PA",
+                  "NJ", "TX", "CA", "MA", "LA", "CA", "CA", "CA", "CA", "CA",
+                  "CA", "IL", "FL", "IL", "MI", "NC", "IN", "PA", "MN", "CA",
+                  "TX", "VA", "WA", "WI", "TN", "NC", "MO", "CT")
+alumni$state <- as.factor(alumni$state)
+alumni$ranking <- c(38, 35, 14, 12, 25, 42, 38, 3, 16, 12,
+                    8, 21, 22, 2, 10, 53, 3, 30, 10, 59,
+                    1, 16, 27, 44, 22, 42, 38, 33, 19, 41,
+                    30, 3, 35, 46, 27, 30, 18, 8, 33, 22,
+                    49, 25, 59, 49, 14, 27, 19, 3)
+```
+
+# Variable Descriptions
+```{r}
+varDesc = c("Name of the school",
+            "The percentage of classes with fewer than 20 students",
+            "Ratio of students and faculty",
+            "Percentage of alumni that made a donation to the university",
+            "Whether or not the school is private",
+            "State the school is located in",
+            "US World News ranking for 2018")
+
+colnames(alumni) %>% 
+  as.data.frame() %>% select( "Variables" = 1) %>% 
+  bind_cols(Description = varDesc) %>% kable()
+```
+
+# Univariate Analyses
+
+The response variable of the model is *alumni_giving_rate*. Below is a summary of all the predictor variables.
+
+## percent_of_classes_under_20
+
+The number of classes with less than 20 students varies from `r range(alumni$percent_of_classes_under_20)[1]` to `r range(alumni$percent_of_classes_under_20)[2]`, averaging at `r round(mean(alumni$percent_of_classes_under_20),2)` across all the schools.
+
+```{r}
+plot1 <- ggplot(alumni, aes(percent_of_classes_under_20)) + geom_histogram() + 
+  ggtitle("Histogram of the variable") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+plot2 <- ggplot(alumni, aes(y = percent_of_classes_under_20)) + geom_boxplot() + 
+  ggtitle("Boxplot to look for outliers") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+plot3 <- ggplot(alumni, aes(percent_of_classes_under_20, alumni_giving_rate)) + 
+  geom_point() + geom_smooth(method = "lm", se = FALSE, color = "red") +
+  ggtitle("Scatter plot relating the two variables") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(plot1, plot2, plot3, nrow = 1, ncol = 3)
+```
+
+The univariate regression model for this variables gives the following coefficients. With this low a p-value, we could expect this variable to influence the alumni giving rate.
+```{r}
+lm(alumni_giving_rate ~ percent_of_classes_under_20, alumni) %>% 
+  summary() %>% .$coefficients
+```
+The donation rate increases by `r round(lm(alumni_giving_rate ~ percent_of_classes_under_20, alumni) %>% summary() %>% .$coefficients %>% .[2,1] , 2)` points for every unit increase in the class percentage.
+
+## student_faculty_ratio
+
+The student_faculty ratio varies from `r range(alumni$student_faculty_ratio)[1]` students to 1 faculty to `r range(alumni$student_faculty_ratio)[2]` students to 1 faculty. The average is `r round(mean(alumni$student_faculty_ratio),2)` students.
+```{r}
+plot1 <- ggplot(alumni, aes(student_faculty_ratio)) + geom_histogram() + 
+  ggtitle("Histogram of student vs faculty ratio") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+plot2 <- ggplot(alumni, aes(y = student_faculty_ratio)) + geom_boxplot() + 
+  ggtitle("Boxplot to look for outliers") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+plot3 <- ggplot(alumni, aes(student_faculty_ratio, alumni_giving_rate)) + 
+  geom_point() + geom_smooth(method = "lm", se = FALSE, color = "red") +
+  ggtitle("Scatter plot relating the two variables") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(plot1, plot2, plot3, nrow = 1, ncol = 3)
+```
+
+The results of a univariate model is available below. Again, we can expect this variable to highly influence the predictor.
+```{r}
+lm(alumni_giving_rate ~ student_faculty_ratio, alumni) %>% 
+  summary() %>% .$coefficients
+```
+The donation rate decreases by `r abs(round(lm(alumni_giving_rate ~ student_faculty_ratio, alumni) %>% summary() %>% .$coefficients %>% .[2,1] , 2))` points for every unit increase in the faculty ratio.
+
+## private
+
+There are `r sum((alumni$private == 1))` private schools and `r sum((alumni$private == 0))` public schools in the dataset.  
+As seen in the graph below and the coefficients of the regression model, it is evident that whether or not a school is private affects the donation it receives from the alumni.
+
+```{r}
+plot1 <- ggplot(alumni, aes(private)) + geom_bar() + 
+  ggtitle("Barchart showing the count of private schools") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+
+plot2 <- ggplot(alumni, aes(x = alumni_giving_rate, y = student_faculty_ratio, 
+                            group = private, color = private)) + 
+  geom_point() + geom_smooth(method = "lm", se = FALSE, color = "red") +
+  ggtitle("The public and private schools have differing donation rates") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(plot1, plot2, nrow = 1, ncol = 2)
+```
+
+```{r}
+lm(alumni_giving_rate ~ private, alumni) %>% 
+  summary() %>% .$coefficients
+```
+What the summary above means is that if a school is public, it receives an average `r round(lm(alumni_giving_rate ~ private, alumni) %>%  summary() %>% .$coefficients %>% .[1,1], 2)` points of donation. But private schools get an additional `r round(lm(alumni_giving_rate ~ private, alumni) %>%  summary() %>% .$coefficients %>% .[2,1], 2)` points.
+
+## state
+
+The data contains schools in `r length(unique(alumni$state))` states. Although it is clear in the first graph that the average donation varies greatly across the states, the second graph shows that the number of records of data we have is too small to analyze this difference. Hence it wouldn't be a good idea to include this variable in the final model.
+
+```{r fig.height = 6}
+plot1 <- alumni %>% group_by(state) %>% 
+  summarise(avgDonation = mean(alumni_giving_rate)) %>% 
+  ggplot(aes(state, avgDonation)) + geom_point() + 
+  ggtitle("Distribution of averate donation across states") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+plot2 <- ggplot(alumni, aes(x = state, y = alumni_giving_rate, color = state)) +
+  geom_point() + geom_smooth(method = "lm", se = FALSE, color = "red") +
+  ggtitle("Donation rates grouped by state") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8),
+          legend.position = "none")
+
+ggarrange(plot1, plot2, nrow = 2, ncol = 1)
+```
+
+## ranking
+
+There is clearly a linear relationship between the rankings and the alumni donations. The higher ranked schools are more likely to get donations from the alumni.  
+This is further evident from the univariate model coefficients below.
+```{r fig.height = 6}
+plot1 <- alumni %>% arrange(by = ranking) %>% 
+  ggplot(aes(x = 1:nrow(alumni), y = ranking)) + geom_point() + 
+  ggtitle("The rankings of the 48 schools sorted in ascending order") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+plot2 <- ggplot(alumni, aes(ranking, alumni_giving_rate)) + 
+  geom_point() + geom_smooth(method = "lm", se = FALSE, color = "red") +
+  ggtitle("Scatter plot relating the two variables") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(plot1, plot2, nrow = 2, ncol = 1)
+```
+
+```{r}
+lm(alumni_giving_rate ~ ranking, alumni) %>% 
+  summary() %>% .$coefficients
+```
+For every unit decrease in rank, the alumni donation increases on an average by `r abs(round(lm(alumni_giving_rate ~ ranking, alumni) %>%  summary() %>% .$coefficients %>% .[2,1], 2))`
+
+# Modelling
+
+## Basic Model
+
+Modelling with all the variables that were found to be influential on the response donation rate.
+
+```{r}
+model1 <- lm(alumni_giving_rate ~ student_faculty_ratio + 
+               percent_of_classes_under_20 + private + ranking, 
+              data = alumni)  
+model1 %>% summary()
+```
+From the p-values of the coefficients, we observe that `percent_of_classes_under_20` and `private` variables do not have a significant influence on the model. We observed the contrary during the univariate analyses. This can probably be explained by multicollinearity between the two variables. The differnece between the $R^2$ and $adjusted \: R^2$ also indicate the same reason. The $MSE$ is observed to be `r round(sum(model1$residuals^2) / (48 - 2), 2)`.
+
+```{r}
+vif(model1)
+```
+But, on checking the Variance Inflation Factor, we do not observe any values above 10, disproving the multicollinearity theory. Hence, the two variables are ignored from the model for now and will be explored later.
+
+## Variable Selection
+
+With the two variables removed, the summary of the new model is 
+```{r}
+model2 <- lm(alumni_giving_rate ~ student_faculty_ratio + ranking,
+             data = alumni)  
+summary(model2)
+```
+Only significant variables remain in the model but we do not see improvement in the $adjusted \: R^2$ at `r round(summary(model2) %>% .$adj.r.squared, 2)` and $MSE$ at `r round(sum(model2$residuals^2) / (48 - 2), 2)`.
+
+### Residual Diagnostics 
+
+Checking the fit of the model with the following residual analysis plots.
+```{r}
+model2Augment <- augment(model2) %>% mutate(row_num = 1:n())
+
+# Plot of residuals against fitted values (non-constant variance and non-linearity)
+p1 <- ggplot(model2Augment, aes(x = .fitted, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  xlab("Fitted value") +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-constant variance & non-linearity test\nFitted values - equally spread around 0") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Plot of residuals against predictor variable (checking non-linearity).
+p2 <- ggplot(model2Augment, aes(x = ranking, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  geom_smooth(color = "forestgreen", alpha = 0.1, se = FALSE) +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-linearity test\nX follows a slight exponential curve") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+p3 <- ggplot(model2Augment, aes(x = student_faculty_ratio, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  geom_smooth(color = "forestgreen", alpha = 0.1, se = FALSE) +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-linearity test\nX follows a curve") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Boxplot of residuals (outlying observations)
+p4 <- ggplot(model2Augment, aes(y = .std.resid)) +
+  geom_boxplot() +
+  ggtitle("Outlying observations test\nOne outlier") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Normal probability Q-Q plot of residuals (non-normality).
+p5 <- ggplot(model2Augment, aes(sample = .std.resid)) +
+  geom_qq(alpha = 0.3) +
+  geom_qq_line(linetype = "dashed", color = "red2") +
+  xlab("Theoretical quantile") +
+  ylab("Sample quantile") +
+  ggtitle("Non-normality test\nThe residuals almost follow a normal distribution") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Plot of residuals against time or another sequence (non-independence)
+p6 <- ggplot(model2Augment, aes(x = row_num, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  xlab("Index") +
+  ylab("Standardized residual") +
+  ggtitle("Non-independance test\nNo residual pattern across row numbers") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(p1, p2, p3, p4, p5, p6, nrow = 2, ncol = 3)
+```
+
+The exponential curve on the `ranking` variable can be improved by applying a log
+transformation.
+
+## Log Transformation
+
+The new model after the transformation.
+```{r}
+# Transforming ranking
+alumni$ranking2 <- log(alumni$ranking)
+
+model4 <- lm(alumni_giving_rate ~ student_faculty_ratio + ranking2,
+             data = alumni)  
+
+summary(model4)
+```
+
+It's observed that the $adjusted \: R^2$ increases to `r round(summary(model4) %>% .$adj.r.squared, 2)` and $MSE$ reduces to `r round(sum(model4$residuals^2) / (48 - 2), 2)`.
+
+### Residual Diagnostics
+```{r}
+model4Augment <- augment(model4) %>% mutate(row_num = 1:n())
+
+# Plot of residuals against fitted values (non-constant variance and non-linearity)
+p1 <- ggplot(model4Augment, aes(x = .fitted, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  xlab("Fitted value") +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-constant variance & non-linearity test\nFitted values - equally spread around 0") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Plot of residuals against predictor variable (checking non-linearity).
+p2 <- ggplot(model4Augment, aes(x = ranking2, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  geom_smooth(color = "forestgreen", alpha = 0.1, se = FALSE) +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-linearity test\nX not exponential anymore") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+p3 <- ggplot(model4Augment, aes(x = student_faculty_ratio, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  geom_smooth(color = "forestgreen", alpha = 0.1, se = FALSE) +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-linearity test\nX follows a curve") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Boxplot of residuals (outlying observations)
+p4 <- ggplot(model4Augment, aes(y = .std.resid)) +
+  geom_boxplot() +
+  ggtitle("Outlying observations test\nOne outlier") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Normal probability Q-Q plot of residuals (non-normality).
+p5 <- ggplot(model4Augment, aes(sample = .std.resid)) +
+  geom_qq(alpha = 0.3) +
+  geom_qq_line(linetype = "dashed", color = "red2") +
+  xlab("Theoretical quantile") +
+  ylab("Sample quantile") +
+  ggtitle("Non-normality test\nThe residuals almost follow a normal distribution") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Plot of residuals against time or another sequence (non-independence)
+p6 <- ggplot(model4Augment, aes(x = row_num, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  xlab("Index") +
+  ylab("Standardized residual") +
+  ggtitle("Non-independance test\nNo residual pattern across row numbers") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(p1, p2, p3, p4, p5, p6, nrow = 2, ncol = 3)
+```
+
+## Box-Cox Transformation
+
+The model can be further improved by applying a Box-Cox transformation on the response vairable. The new model is presented below.
+```{r}
+# Calculating the lambda for the transformation
+bc <- MASS::boxcox(model2, plotit = FALSE)
+lambda <- bc$x[which.max(bc$y)]
+
+# Applying the transformation
+alumni$alumni_giving_rate2 <- (alumni$alumni_giving_rate ^ lambda - 1) / lambda
+
+model3 <- lm(alumni_giving_rate2 ~ student_faculty_ratio + ranking2,
+             data = alumni)  
+
+summary(model3)
+```
+The $adjusted \: R^2$ increases further to `r round(summary(model3) %>% .$adj.r.squared, 2)` and $MSE$ reduces significantly to `r round(sum(model3$residuals^2) / (48 - 2), 2)`.
+
+### Residual Diagnostics 
+
+Applying the same residual diagnostics on the new model.
+
+```{r}
+model3Augment <- augment(model3) %>% mutate(row_num = 1:n())
+
+# Plot of residuals against fitted values (non-constant variance and non-linearity)
+p1 <- ggplot(model3Augment, aes(x = .fitted, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  xlab("Fitted value") +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-constant variance & non-linearity test\nFitted values - equally spread around 0") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Plot of residuals against predictor variable (checking non-linearity).
+p2 <- ggplot(model3Augment, aes(x = ranking2, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  geom_smooth(color = "forestgreen", alpha = 0.1, se = FALSE) +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-linearity test\nX follows a slight exponential curve, but improved") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+p3 <- ggplot(model3Augment, aes(x = student_faculty_ratio, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted") +
+  geom_smooth(color = "forestgreen", alpha = 0.1, se = FALSE) +
+  ylab("Standardized residuals") + 
+  ggtitle("Non-linearity test\nX still follows a curve, but improved") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Boxplot of residuals (outlying observations)
+p4 <- ggplot(model3Augment, aes(y = .std.resid)) +
+  geom_boxplot() +
+  ggtitle("Outlying observations test\nOne outlier") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Normal probability Q-Q plot of residuals (non-normality).
+p5 <- ggplot(model3Augment, aes(sample = .std.resid)) +
+  geom_qq(alpha = 0.3) +
+  geom_qq_line(linetype = "dashed", color = "red2") +
+  xlab("Theoretical quantile") +
+  ylab("Sample quantile") +
+  ggtitle("Non-normality test\nThe residuals follow normal distribution much better") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+# Plot of residuals against time or another sequence (non-independence)
+p6 <- ggplot(model3Augment, aes(x = row_num, y = .std.resid)) +
+  geom_point(alpha = 0.3) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red2") +
+  xlab("Index") +
+  ylab("Standardized residual") +
+  ggtitle("Non-independance test\nNo residual pattern across row numbers") + 
+    theme(plot.title = element_text(size = 8), axis.title = element_text(size = 8))
+
+ggarrange(p1, p2, p3, p4, p5, p6, nrow = 2, ncol = 3)
+```
+
+## Variable Selection 2
+
+### Insert variable `private`
+Going back to the variabels that were ignored, `private` is fit into the final model and found to improve.
+```{r}
+model5 <- lm(alumni_giving_rate2 ~ student_faculty_ratio + ranking2 + private,
+             data = alumni)  
+summary(model5)
+```
+The $adjusted \: R^2$ increases again to `r round(summary(model5) %>% .$adj.r.squared, 2)` and $MSE$ reduces further to `r round(sum(model5$residuals^2) / (48 - 2), 2)`.
+<br><br>
+But the significance of the `student_faculty_ratio` variable dips. The increase in $adjusted \: R^2$ and $MSE$ is not high enough to justify accepting the new model.
+
+### Insert variable `percent_of_classes_under_20`
+This variable however does the opposite and decreases $adjusted \: R^2$ and $MSE$.
+```{r}
+model6 <- lm(alumni_giving_rate2 ~ student_faculty_ratio + ranking2 +
+               percent_of_classes_under_20,
+             data = alumni)  
+summary(model6)
+```
+# Summary
+
+The final model shows that the `alumni_giving_rate` depends on the `ranking` and the `student_faculty_ratio` variables.
+
+$$alumniGivingRate^.505 - 1.98 = 14.636 - (0.319*studentFacultyRatio) - (0.798*log(ranking))$$
+
+The $adjusted \: R^2$ explains `r round(100 * summary(model3) %>% .$adj.r.squared, 2)` of the `alumni_giving_rate` with a low mean-squared error of `r round(sum(model3$residuals^2) / (48 - 2), 2)`.  
+The negative relationship of the two predictor variables can be explained by the negative linear relationship that was observed earlier.
